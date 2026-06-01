@@ -1,0 +1,103 @@
+---
+title: "AS fooof"
+author: "Abby Beatty"
+date: "2026-05-20"
+output: pdf_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r load libraries}
+library(paletteer)
+library(patchwork)
+library(ggnewscale)
+library(dplyr)
+library(viridis)
+library(gratia)
+library(R.matlab)
+library(ggplot2)
+library(ggrepel)
+library(ggdist)
+library(lme4)
+library(LNCDR)
+library(lmerTest)
+library(reshape2)
+library(scales)
+library(tidyr)
+library(gridExtra)
+library(ggpubr)
+library(mgcv)
+library(emmeans)
+library(modelr)
+library(stringr)
+library(boot)
+library(mediation)
+library(lmeresampler)
+library(ggeffects)
+library(sjPlot)
+library(interactions)
+library(grid)
+library(ggeffects)
+```
+
+
+```{r}
+ap_df <- read.csv('/Volumes/Hera/Abby/FOOOF/aps.csv')
+merged7t <- read.csv("/Volumes/Hera/Projects/7TBrainMech/scripts/txt/merged_7t.csv")
+ap_df <- ap_df %>% 
+  left_join(merged7t %>% dplyr::select(lunaid,eeg.date,eeg.age) %>% distinct(),
+            by = c("lunaid","eeg_date"="eeg.date"))
+
+peak_df <- read.csv('/Volumes/Hera/Abby/FOOOF/peaks.csv')
+peak_df <- peak_df %>% 
+  left_join(merged7t %>% dplyr::select(lunaid,eeg.date,eeg.age) %>% distinct(),
+            by = c("lunaid","eeg_date"="eeg.date"))
+
+fit_df <- read.csv('/Volumes/Hera/Abby/FOOOF/fits.csv')
+fit_df <- fit_df %>%
+  left_join(merged7t %>% dplyr::select(lunaid,eeg.date,eeg.age) %>% distinct(),
+            by = c("lunaid","eeg_date"="eeg.date"))
+# add one to all indicies because python uses 0 indexing
+ap_df <- ap_df %>% mutate(
+  epoch = epoch +1,
+  channel = channel +1
+)
+
+peak_df <- peak_df %>% mutate(
+  epoch = epoch +1,
+  channel = channel + 1,
+  spectrum_idx = spectrum_idx + 1
+)
+
+fit_df <- fit_df %>% mutate(
+  epoch = epoch +1,
+  channel = channel +1
+)
+```
+
+```{r}
+avgchan_ap_df <- ap_df %>% group_by(lunaid,eeg_date) %>%
+  summarise(across(where(is.numeric), \(x) mean(x,na.rm=T)))
+
+ggplot(data = avgchan_ap_df, aes(x = eeg.age, y = exponent)) + 
+  geom_point( alpha = 0.5) + 
+  geom_line(aes(group=lunaid),alpha = 0.5) + theme_classic()
+
+ggplot(data = avgchan_ap_df, aes(x = eeg.age, y = offset)) + 
+  geom_point( alpha = 0.5) + 
+  geom_line(aes(group=lunaid),alpha = 0.5) + theme_classic()
+
+# single participant
+sub_ap_df <- ap_df %>% filter(lunaid == 11645)
+avgchan_sub_ap_df <- sub_ap_df %>% group_by(lunaid,eeg_date,epoch) %>%
+  summarise(across(where(is.numeric),\(x) mean(x,na.rm=T)))
+
+ggplot(data=avgchan_sub_ap_df, aes(x=epoch,y=exponent,group = eeg.age)) + 
+  geom_point(aes(color=eeg.age)) +
+  geom_line(aes(color=eeg.age)) + theme_classic()
+
+ggplot(data=avgchan_sub_ap_df, aes(x=epoch,y=offset,group = eeg.age)) + 
+  geom_point(aes(color=eeg.age)) +
+  geom_line(aes(color=eeg.age)) + theme_classic()
+```
+
