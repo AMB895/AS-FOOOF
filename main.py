@@ -19,7 +19,7 @@ from fooof.bands import Bands
 from fooof.analysis import get_band_peak_fg
 from fooof.plts.spectra import plot_spectrum
 import os.path as op
-import glob2
+import glob
 import re
 import specparam
 from fooof import FOOOF, FOOOFGroup
@@ -36,53 +36,46 @@ import pandas as pd
 
 
 print(fooof.__version__)
-files = glob2.glob('/Volumes/Hera/Abby/Lindsay/preprocessed_data/anti/AfterWhole/kept_epoch/*.set', recursive=True)
+files = glob.glob('/Volumes/Hera/Abby/Lindsay/preprocessed_data/anti/AfterWhole/kept_epoch/*kept_prep.set')
 print(len(files))
 for fname in files:
    # extract id and date from file name   
     pattern = r'(\d{5})_(\d{8})'
     match = re.search(pattern, fname)
-    id = match.group(1)
+    lunaid = match.group(1)
     date = match.group(2)
     filename = f"{match}"
-    print(id,date)
+    print(lunaid, date)
 
     # final file path and name
     save_path = '/Volumes/Hera/Abby/FOOOF/SubjectFiles/'
-    sub_name = "{id}_{date}.mat".format(id=id, date=date)
+    sub_name = "{id}_{date}.mat".format(id=lunaid, date=date)
     full_file = save_path + sub_name
     print(full_file)
 
     # skip if ran subject
     if os.path.exists(full_file):
-        print(f"skipping {id} {date} - output file already exists")
+        print(f"skipping {lunaid} {date} - output file already exists")
         continue
 
     # catch files that fail to load (e.g. fewer than 2 epochs)
     try:
         raw = mne.io.read_epochs_eeglab(fname)
     except Exception as e:
-        print(f"Skipping {id} {date} - failed to load: {e}")
+        print(f"Skipping {lunaid} {date} - failed to load: {e}")
         continue
 
     raw = raw.pick_types(meg=False, eeg=True, eog=False)
-   
-    pattern = r'(\d{5})_(\d{8})'
-    match = re.search(pattern, fname)
-    id = match.group(1)
-    date = match.group(2)
-    filename = f"{match}"
-    print(id,date)
-    # save all data frames
-    save_path = '/Volumes/Hera/Abby/FOOOF/SubjectFiles/'
-    sub_name = "{id}_{date}.mat".format(id=id, date=date)
-    full_file = save_path + sub_name
-    print(full_file)
+    # get trial score
+    eventid_to_name = {v: k for k, v in raw.event_id.items()}
+    epoch_labels = [eventid_to_name[e] for e in raw.events[:,2]]
+    prep_epoch_labels = [re.search(r'2_\w+',e).group() for e in epoch_labels]
+    #print(prep_epoch_labels)
+    prep_epoch_df = pd.DataFrame({
+        'epoch': range(len(prep_epoch_labels)),
+        'label': prep_epoch_labels
+    })
 
-    if os.path.exists(full_file):
-        print(f"skipping {id} {date} - output file already exists")
-        continue    # raw.plot()
-    # plt.show()
     spectrum = raw.compute_psd(method='welch', fmin=1, fmax=60, tmin=0, tmax=None,
                                picks='all', n_fft=512, n_overlap=128, window='hamming')
     psds, freqs = spectrum.get_data(return_freqs=True)  # grab frequency values corresponding to spectrum
@@ -93,7 +86,7 @@ for fname in files:
     # fm.fit(freqs, spectra)
     fms = fit_fooof_3d(fm,freqs,spectra)
     ntrials = len(fms)
-    #print(len(fms))
+    print('fit fooof parameters')
 
     # aperiodic parameters
     ap_params = fm.get_params('aperiodic_params')
@@ -102,7 +95,6 @@ for fname in files:
     channels_cols = (flat_idx % 64).reshape(-1, 1)
     ap_params_full = np.hstack([ap_params, epochs_cols, channels_cols])
     ap_params_df = pd.DataFrame(ap_params_full, columns=['offset','exponent','epoch','channel'])
-    #print(ap_params_df)
 
     # periodic parameters
     peak_params = fm.get_params('peak_params')
@@ -111,7 +103,6 @@ for fname in files:
     channels_cols = (flat_idx % 64).reshape(-1,1)
     peak_params_full = np.hstack([peak_params,epochs_cols,channels_cols])
     peak_params_df = pd.DataFrame(peak_params_full, columns=['CF','PW','BW','spectrum_idx','epoch','channel'])
-   # print(peak_params_df)
 
     # gaussian parameters
     gauss_params = fm.get_params('gaussian_params')
@@ -120,7 +111,6 @@ for fname in files:
     channels_cols = (flat_idx % 64).reshape(-1,1)
     gauss_params_full = np.hstack([gauss_params,epochs_cols,channels_cols])
     gauss_params_df = pd.DataFrame(gauss_params_full, columns=['mean', 'height', 'SD','spectrum_idx','epoch','channel'])
-    #print(gauss_params_df)
 
     # fit params
     errors = fm.get_params('error')
@@ -141,10 +131,12 @@ for fname in files:
         'peak_params': peak_params_df.values,
         'gauss_params': gauss_params_df.values,
         'fit_params': fit_df.values,
+        'trial_score': prep_epoch_df.values,
         'ap_cols': ap_params_df.columns.tolist(),
         'peak_cols': peak_params_df.columns.tolist(),
         'gauss_cols': gauss_params_df.columns.tolist(),
-        'fit_cols': fit_df.columns.tolist()
+        'fit_cols': fit_df.columns.tolist(),
+        'trial_score_cols': prep_epoch_df.columns.tolist()
     })
 
 
